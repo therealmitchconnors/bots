@@ -765,14 +765,13 @@ func (ss *syncState) handleTestResults(org *config.Org) error {
 	scope.Debugf("Getting test results for org %s", org.Name)
 	g := resultgatherer.TestResultGatherer{Client: ss.syncer.blobstore, BucketName: org.BucketName,
 		PreSubmitPrefix: org.PreSubmitTestPath, PostSubmitPrefix: org.PostSubmitTestPath}
-	// TODO: this should be paralellized for speed
 	for _, repo := range org.Repos {
-		prPaths, err := g.GetAllPullRequests(ss.ctx, org.Name, repo.Name)
-		if err != nil {
-			return err
-		}
-		for _, prPath := range prPaths {
-			prParts := strings.Split(prPath, "/")
+		prPaths := g.GetAllPullRequestsChan(ss.ctx, org.Name, repo.Name)
+		for item := range prPaths {
+			if item.Err != nil {
+				return item.Err
+			}
+			prParts := strings.Split(item.Result, "/")
 			prNum, err := strconv.ParseInt(prParts[len(prParts)-2], 10, 64)
 			if err != nil {
 				return err
