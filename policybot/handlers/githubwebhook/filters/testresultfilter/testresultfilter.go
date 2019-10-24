@@ -98,7 +98,7 @@ func (r *TestResultFilter) Handle(context context.Context, event interface{}) {
 			handlers.cov.SetCoverageStatus(context, p.GetPullRequest().GetHead().GetSHA(), coverage.Pending,
 				"Waiting for test results.")
 		}
-		testResults, err := handlers.trg.CheckTestResultsForPr(context, orgLogin, repoName, int64(prNum))
+		testResults, err := handlers.trg.CheckTestResultsForPr(context, orgLogin, repoName, string(prNum))
 		if err != nil {
 			scope.Errorf("Error: Unable to get test result for PR %d in repo %s: %v", prNum, repoName, err)
 			return
@@ -130,7 +130,7 @@ func (r *TestResultFilter) Handle(context context.Context, event interface{}) {
 			scope.Errorf("Error fetching pull request info for commit %s: %v", sha, err)
 			return
 		}
-		prNum := int64(pr.GetNumber())
+		prNum := string(pr.GetNumber())
 		scope.Infof("Commit %s corresponds to pull request %d.", sha, prNum)
 
 		testResults, err := val.trg.CheckTestResultsForPr(context, orgLogin, repoName, prNum)
