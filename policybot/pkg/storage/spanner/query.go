@@ -151,7 +151,7 @@ func (s store) QueryFailedTests(context context.Context, orgLogin string, repoNa
 	WHERE OrgLogin = @orgLogin AND
 	RepoName = @repoName AND
 	Result = "FAILURE"
-	WHERE PullRequestNumber >= @prMin
+	AND PullRequestNumber >= @prMin
 	AND PullRequestNumber <= @prMax
 	ORDER BY StartTime DESC;`
 	stmt := spanner.NewStatement(sql)

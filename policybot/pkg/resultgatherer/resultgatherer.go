@@ -218,7 +218,9 @@ func (trg *TestResultGatherer) GetEnvironmentalSignatures(ctx context.Context, t
 			names = append(names, name)
 		}
 		foo := getSignature(r, signatures)
-		result = append(result, names[foo])
+		if foo > -1 {
+			result = append(result, names[foo])
+		}
 	}
 	return
 }
