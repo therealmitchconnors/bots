@@ -81,6 +81,8 @@ type Store interface {
 	QueryCoverageDataBySHA(context context.Context, orgLogin string, repoName string, sha string, cb func(*CoverageData) error) error
 	QueryAllUserAffiliations(context context.Context, cb func(affiliation *UserAffiliation) error) error
 
+	QueryTestFlakes(context context.Context, orgLogin string, repoName string, prMin int, testName string,
+		cb func(flake *TestFlake) error) error
 	// TODO: needs to be org-specific and/or repo-specific, needs to use a callback instead of returning a slice
 	QueryTestFlakeIssues(context context.Context, inactiveDays, createdDays int) ([]*Issue, error)
 }

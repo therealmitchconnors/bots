@@ -144,6 +144,45 @@ func (s store) QueryTestResultByPrNumber(
 	return err
 }
 
+func (s store) QueryTestFlakes(context context.Context, orgLogin string, repoName string, prMin int, testName string,
+	cb func(flake *storage.TestFlake) error) error {
+	sql := `select failed.PullRequestNumber, failed.RunNumber as FailedRunNumber, failed.TestName, 
+failed.FinishTime as FailedFinishTime, failed.RunPath as FailedRunPath, 
+passed.RunNumber as PassedRunNumber, passed.RunPath as PassedRunPath
+from TestResults as failed 
+JOIN TestResults as passed
+ON passed.PullRequestNumber = failed.PullRequestNumber AND
+                        passed.RunNumber != failed.RunNumber AND
+                        passed.TestName = failed.TestName AND
+						passed.TestName = @testName AND
+                        passed.sha = failed.sha AND
+                        passed.TestPassed AND 
+                        passed.PullRequestNumber > @prMin AND
+						passed.OrgLogin = @orgLogin AND
+	                    passedRepoName = @repoName AND
+NOT failed.TestPassed AND
+failed.FinishTime > TIMESTAMP(DATE(2010,1,1)) AND
+NOT failed.CloneFailed AND
+failed.result!='ABORTED'
+order by failed.StartTime desc`
+	stmt := spanner.NewStatement(sql)
+	stmt.Params["orgLogin"] = orgLogin
+	stmt.Params["repoName"] = repoName
+	stmt.Params["prMin"] = prMin
+	stmt.Params["testName"] = testName
+	iter := s.client.Single().Query(context, stmt)
+	err := iter.Do(func(row *spanner.Row) error {
+		testFlake := &storage.TestFlake{}
+		if err := rowToStruct(row, testFlake); err != nil {
+			return err
+		}
+
+		return cb(testFlake)
+	})
+
+	return err
+}
+
 func (s store) QueryFailedTests(context context.Context, orgLogin string, repoName string, prMin, prMax int,
 	cb func(*storage.TestResult) error) error {
 

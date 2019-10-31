@@ -178,6 +178,17 @@ type ActivityInfo struct {
 	LastActivity time.Time                    // when is the last time any activity took place
 }
 
+// This is a read-only struct for representing probable test flakes.
+type TestFlake struct {
+	PullRequestNumber int64
+	TestName          string
+	FailedRunNumber   int64
+	FailedFinishTime  time.Time
+	FailedRunPath     string
+	PassedRunNumber   int64
+	PassedRunPath     string
+}
+
 type TestResult struct {
 	StartTime  time.Time
 	FinishTime time.Time
