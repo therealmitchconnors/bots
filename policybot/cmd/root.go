@@ -42,6 +42,7 @@ func GetRootCmd(args []string) *cobra.Command {
 	rootCmd.AddCommand(milestoneMakerCmd())
 	rootCmd.AddCommand(userdataCmd())
 	rootCmd.AddCommand(version.CobraCommand())
+	rootCmd.AddCommand(experimentCmd)
 
 	return rootCmd
 }
