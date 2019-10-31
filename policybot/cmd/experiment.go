@@ -60,7 +60,6 @@ to quickly create a Cobra application.`,
 		if err != nil {
 			return fmt.Errorf("unable to create storage layer: %v", err)
 		}
-		defer store.Close()
 
 		ExperimentClients, err = experiment.NewClient(ctx, gc, creds, ca.GCPProject, zc, store, ca.Orgs)
 		if err != nil {
@@ -68,6 +67,9 @@ to quickly create a Cobra application.`,
 		}
 
 		return nil
+	},
+	PersistentPostRun: func(cmd *cobra.Command, args []string) {
+		ExperimentClients.Store.Close()
 	},
 }
 
