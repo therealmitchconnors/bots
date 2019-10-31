@@ -159,7 +159,7 @@ ON passed.PullRequestNumber = failed.PullRequestNumber AND
                         passed.TestPassed AND 
                         passed.PullRequestNumber > @prMin AND
 						passed.OrgLogin = @orgLogin AND
-	                    passedRepoName = @repoName AND
+	                    passed.RepoName = @repoName AND
 NOT failed.TestPassed AND
 failed.FinishTime > TIMESTAMP(DATE(2010,1,1)) AND
 NOT failed.CloneFailed AND

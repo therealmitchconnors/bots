@@ -16,7 +16,6 @@ package cmd
 
 import (
 	"fmt"
-
 	"istio.io/bots/policybot/pkg/config"
 	"istio.io/bots/policybot/pkg/experiment"
 	"istio.io/bots/policybot/pkg/pipeline"
@@ -39,18 +38,24 @@ to quickly create a Cobra application.`,
 		testName = args[0]
 		fmt.Println("examineFlakes called")
 		e := ExperimentClients
-		startPipe := make(chan pipeline.OutResult, 1)
+		startPipe := make(chan pipeline.OutResult, 1000)
+		fmt.Printf("Begin querying spanner.  This might take a minute...")
 		go func() {
 			defer close(startPipe)
-			e.Store.QueryTestFlakes(e.Ctx, "istio", "istio", 15000, testName, func(flake *storage.TestFlake) error {
+			err := e.Store.QueryTestFlakes(e.Ctx, "istio", "istio", 15000, testName, func(flake *storage.TestFlake) error {
 				startPipe <- pipeline.NewOutResult(nil, flake)
 				return nil
 			})
+			if err != nil {
+				startPipe <- pipeline.NewOutResult(err, nil)
+			}
 		}()
 		org, _ := getOrgAndRepoFromClients(e, "istio", "istio")
 		bucket := e.Blobstore.Bucket(org.BucketName)
-		x := pipeline.FromChan(startPipe).Transform(func(iFlake interface{}) (i interface{}, err error) {
-			flake := iFlake.(storage.TestFlake)
+		x := pipeline.FromChan(startPipe).OnError(func(e error) {
+			fmt.Printf("WARNING: encountered unexpected error reading from spanner: %v", e)
+		}).Transform(func(iFlake interface{}) (i interface{}, err error) {
+			flake := iFlake.(*storage.TestFlake)
 			passLog, err := gcsLocToContents(flake.PassedRunPath+"build-log.txt", bucket, e.Ctx)
 			if err != nil {
 				return
