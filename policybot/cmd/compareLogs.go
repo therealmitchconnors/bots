@@ -17,13 +17,15 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"github.com/pkg/errors"
-	"github.com/sergi/go-diff/diffmatchpatch"
 	"io/ioutil"
-	"istio.io/bots/policybot/pkg/blobstorage"
 	"os"
 	"regexp"
 	"sort"
+
+	"github.com/pkg/errors"
+	"github.com/sergi/go-diff/diffmatchpatch"
+
+	"istio.io/bots/policybot/pkg/blobstorage"
 
 	"github.com/spf13/cobra"
 )
@@ -50,9 +52,9 @@ strings.`,
 		d := diffmatchpatch.New()
 		d.MatchDistance = 1000
 		x := d.DiffMain(clean(failedLog), clean(passedLog), true)
-		type levdiff struct{
+		type levdiff struct {
 			levScore int
-			diffs     []diffmatchpatch.Diff
+			diffs    []diffmatchpatch.Diff
 		}
 		var all []levdiff
 		var curr levdiff
@@ -68,7 +70,7 @@ strings.`,
 		}
 
 		sort.Slice(all, func(i, j int) bool {
-			return all[i].levScore>all[j].levScore
+			return all[i].levScore > all[j].levScore
 		})
 		i := 0
 		for _, big := range all {
@@ -89,7 +91,7 @@ strings.`,
 }
 
 type rx struct {
-	regex string
+	regex   string
 	replace string
 }
 
@@ -102,9 +104,9 @@ func max(x, y int) int {
 
 func clean(log string) string {
 	dirts := []rx{
-		rx{"(\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d:[0-5]\\d|Z))|(\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d([+-][0-2]\\d:[0-5]\\d|Z))|(\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d([+-][0-2]\\d:[0-5]\\d|Z))", "SEDDATE",},
+		rx{"(\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d:[0-5]\\d|Z))|(\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d([+-][0-2]\\d:[0-5]\\d|Z))|(\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d([+-][0-2]\\d:[0-5]\\d|Z))", "SEDDATE"},
 		rx{"\\d{2}:\\d{2}:\\d{2}(\\.\\d*)?", "SEDTIME"},
-		rx{"-[\\da-f]{8,10}-[\\da-z]{5}","-SEDPOD"},
+		rx{"-[\\da-f]{8,10}-[\\da-z]{5}", "-SEDPOD"},
 		rx{"-[\\da-f]{6,}", "-SEDHEX"},
 		rx{"\\(\\d+\\.\\d+s\\)", "SEDDUR"},
 		rx{"/tmp\\.[a-zA-Z]{10}(\\W)", "/SEDTMP$1"},
@@ -131,11 +133,11 @@ func clean(log string) string {
 func gcsLocToContents(location string, b blobstorage.Bucket, ctx context.Context) (string, error) {
 	read, err := b.Reader(ctx, location)
 	if err != nil {
-		return "", errors.Wrap(err, "Unable to create reader for " + location)
+		return "", errors.Wrap(err, "Unable to create reader for "+location)
 	}
 	bytes, err := ioutil.ReadAll(read)
 	if err != nil {
-		return "", errors.Wrap(err, "unable to read " + location)
+		return "", errors.Wrap(err, "unable to read "+location)
 	}
 	return string(bytes), nil
 }
@@ -143,6 +145,7 @@ func gcsLocToContents(location string, b blobstorage.Bucket, ctx context.Context
 var (
 	passedLoc, failedLoc string
 )
+
 func init() {
 	experimentCmd.AddCommand(compareLogsCmd)
 	compareLogsCmd.PersistentFlags().StringVar(&passedLoc, "passed-location",

@@ -15,13 +15,6 @@
 package cmd
 
 import (
-	"context"
-	"fmt"
-	"io/ioutil"
-
-	"istio.io/bots/policybot/pkg/blobstorage"
-
-	"github.com/sergi/go-diff/diffmatchpatch"
 	"github.com/spf13/cobra"
 )
 
@@ -36,28 +29,8 @@ Cobra is a CLI library for Go that empowers applications.
 This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		e := ExperimentClients
-		fmt.Println("getSignatures called")
-		failedLoc := "pr-logs/pull/istio_istio/18332/pilot-multicluster-e2e_istio/2387/"
-		passedLoc := "pr-logs/pull/istio_istio/18332/pilot-multicluster-e2e_istio/2260/"
-		bucket := e.Blobstore.Bucket(e.Orgs[0].BucketName)
-		failedLog, err := gcsLocToContents(failedLoc, bucket, e.Ctx)
-		passedLog, err := gcsLocToContents(passedLoc, bucket, e.Ctx)
-		d := diffmatchpatch.New()
-		d.DifWITHfMain(failedLog, passedLog, false)
+		return nil
 	},
-}
-
-func gcsLocToContents(location string, b blobstorage.Bucket, ctx context.Context) (string, error) {
-	read, err := b.Reader(ctx, location)
-	if err != nil {
-		return "", err
-	}
-	bytes, err := ioutil.ReadAll(read)
-	if err != nil {
-		return "", err
-	}
-	return string(bytes), nil
 }
 
 func init() {

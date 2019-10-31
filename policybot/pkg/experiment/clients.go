@@ -1,10 +1,12 @@
 package experiment
 
 import (
-	"cloud.google.com/go/bigquery"
 	"context"
 	"fmt"
+
+	"cloud.google.com/go/bigquery"
 	"google.golang.org/api/option"
+
 	"istio.io/bots/policybot/pkg/blobstorage"
 	"istio.io/bots/policybot/pkg/blobstorage/gcs"
 	"istio.io/bots/policybot/pkg/config"

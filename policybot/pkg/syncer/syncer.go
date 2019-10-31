@@ -799,7 +799,7 @@ func (ss *syncState) handleTestRootCause(org *config.Org) error {
 		errorChan := pipeline.FromChan(failedTests).Transform(func(i2 interface{}) (i interface{}, e error) {
 			sr := i2.(*storage.TestResult)
 			sr.Signatures = g.GetEnvironmentalSignatures(ss.ctx, sr.RunPath)
-			if len(sr.Signatures)<1 {
+			if len(sr.Signatures) < 1 {
 				return nil, pipeline.Skip
 			}
 			return sr, nil
