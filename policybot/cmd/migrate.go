@@ -78,22 +78,7 @@ to quickly create a Cobra application.`,
 
 		fmt.Printf("Target table has %d rows.  Calculating batches.\n", count)
 
-		// metaBatch refers to the partition of jobs that will be handled by a single worker
-		metaBatchSize := (count-int64(start))/int64(30*batch)
-		flatjobs := []interface{}{}
-		for i := int64(start); i < count; i += int64(batch) {
-			flatjobs = append(flatjobs, i)
-		}
-
-		jobs := []interface{}{}
-		for j := int64(0); j < int64(len(flatjobs)); j+=metaBatchSize {
-			end := j+metaBatchSize
-			if end >= int64(len(flatjobs)) {
-				end = int64(len(flatjobs) - 1)
-			}
-			jobs[j] = flatjobs[j:end]
-		}
-
+		jobs := buildPartitionedJobs(start, batch, count)
 
 		jobChan := pipeline.BuildProducer(context.TODO(), jobs)
 		errorChan := pipeline.FromChan(jobChan).WithParallelism(30).To(func(i interface{}) error {
@@ -115,6 +100,36 @@ to quickly create a Cobra application.`,
 		}
 		return nil
 	},
+}
+
+// returns [][]int64 cast to []interface{}
+func buildPartitionedJobs(offset, batch int, count int64) []interface{} {
+	// metaBatch refers to the partition of jobs that will be handled by a single worker
+	metaBatchSize := int((count-int64(offset))/int64(30*batch))
+	remainder := ((count-int64(offset)) % int64(30*batch))/int64(batch)
+	if metaBatchSize < 1 {
+		metaBatchSize = 1
+	}
+	flatjobs := []interface{}{}
+	for i := int64(offset); i < count; i += int64(batch) {
+		flatjobs = append(flatjobs, i)
+	}
+
+	jobs := make([]interface{}, 30)
+
+	start := 0
+	end := start + metaBatchSize
+	i:=0
+	for end < len(flatjobs) {
+		if int64(i) < remainder {
+			end++
+		}
+		jobs[i] = flatjobs[start:end]
+		start = end
+		end = start + metaBatchSize
+		i++
+	}
+	return jobs
 }
 
 func doInsert(client *spanner.Client, offset int64, limit int, retry bool) error {
