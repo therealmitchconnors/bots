@@ -44,6 +44,7 @@ func GetRootCmd(args []string) *cobra.Command {
 	rootCmd.AddCommand(lifecycleMgrCmd())
 	rootCmd.AddCommand(version.CobraCommand())
 	rootCmd.AddCommand(migrateCmd)
+	rootCmd.AddCommand(migrate2Cmd)
 
 	return rootCmd
 }
