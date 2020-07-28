@@ -78,16 +78,33 @@ to quickly create a Cobra application.`,
 
 		fmt.Printf("Target table has %d rows.  Calculating batches.\n", count)
 
-		jobs := []interface{}{}
+		// metaBatch refers to the partition of jobs that will be handled by a single worker
+		metaBatchSize := (count-int64(start))/int64(30*batch)
+		flatjobs := []interface{}{}
 		for i := int64(start); i < count; i += int64(batch) {
-			jobs = append(jobs, i)
+			flatjobs = append(flatjobs, i)
 		}
 
+		jobs := []interface{}{}
+		for j := int64(0); j < int64(len(flatjobs)); j+=metaBatchSize {
+			end := j+metaBatchSize
+			if end >= int64(len(flatjobs)) {
+				end = int64(len(flatjobs) - 1)
+			}
+			jobs[j] = flatjobs[j:end]
+		}
+
+
 		jobChan := pipeline.BuildProducer(context.TODO(), jobs)
-		errorChan := pipeline.FromChan(jobChan).To(func(i interface{}) error {
-			offset := i.(int64)
-			fmt.Printf("attempting to run batch starting at %d\n", offset)
-			return doInsert(client, offset, batch, true)
+		errorChan := pipeline.FromChan(jobChan).WithParallelism(30).To(func(i interface{}) error {
+			offsets := i.([]interface{})
+			var merr error
+			for _, x := range offsets {
+				offset := x.(int64)
+				fmt.Printf("attempting to run batch starting at %d\n", offset)
+				merr = multierror.Append(merr, doInsert(client, offset, batch, true))
+			}
+			return merr
 		}).Go()
 		var result *multierror.Error
 		for err := range errorChan {
@@ -110,7 +127,7 @@ func doInsert(client *spanner.Client, offset int64, limit int, retry bool) error
 		if retry {
 			code := spanner.ErrCode(err)
 			if code == codes.InvalidArgument {
-				fmt.Printf("failed writing batch %d, subdividing", offset)
+				fmt.Printf("failed writing batch %d, subdividing\n", offset)
 				// retry smaller
 				newlimit := limit/4
 				var merr error
@@ -119,12 +136,12 @@ func doInsert(client *spanner.Client, offset int64, limit int, retry bool) error
 				}
 				return merr
 			} else if code == codes.Aborted {
-				fmt.Printf("failed writing batch %d, retrying", offset)
+				fmt.Printf("failed writing batch %d, retrying\n", offset)
 				time.Sleep(10*time.Millisecond)
 				return doInsert(client, offset, limit, false)
 			}
 		} else {
-			fmt.Printf("permanent failure writing batch %d limit %d", offset, limit)
+			fmt.Printf("permanent failure writing batch %d limit %d\n", offset, limit)
 			return err
 		}
 	}
