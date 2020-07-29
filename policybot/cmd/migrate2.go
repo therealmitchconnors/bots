@@ -15,13 +15,16 @@
 package cmd
 
 import (
+	"cloud.google.com/go/civil"
 	"cloud.google.com/go/spanner"
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"github.com/hashicorp/go-multierror"
 	"github.com/spf13/cobra"
 	"google.golang.org/api/option"
+	spanner2 "google.golang.org/genproto/googleapis/spanner/v1"
 	"google.golang.org/grpc/codes"
 	"istio.io/bots/policybot/pkg/pipeline"
 	"istio.io/pkg/env"
@@ -46,6 +49,7 @@ to quickly create a Cobra application.`,
 		if err != nil {
 			return fmt.Errorf("unable to decode GCP credentials: %v", err)
 		}
+
 		client, err := spanner.NewClient(context.TODO(),
 			"projects/istio-testing/instances/istio-policy-bot/databases/main", option.WithCredentialsJSON(creds))
 		if err != nil {
@@ -54,6 +58,7 @@ to quickly create a Cobra application.`,
 		rows := client.Single().Query(context.TODO(), spanner.Statement{
 			SQL:    "SELECT * FROM " + srcTable,
 		})
+		fmt.Print("Finished sending query, beginning write operations")
 		errorChan := pipeline.FromIter(pipeline.IterProducer{
 			Setup:    func() error { return nil},
 			Iterator: func() (i interface{}, e error) {
@@ -63,9 +68,15 @@ to quickly create a Cobra application.`,
 				}
 				out := make(map[string]interface{})
 				for _, colname := range row.ColumnNames() {
-					var val interface{}
-					err := row.ColumnByName(colname, &val)
+					var val2 spanner.GenericColumnValue
+					err := row.ColumnByName(colname, &val2)
 					if err != nil {
+						fmt.Printf("Unable to retrieve column value: %v", err)
+						return nil, err
+					}
+					val, err := decode(val2)
+					if err != nil {
+						fmt.Printf("Unable to decode column value: %v", err)
 						return nil, err
 					}
 					out[colname] = val
@@ -73,10 +84,15 @@ to quickly create a Cobra application.`,
 				return spanner.InsertOrUpdateMap(srcTable + "_TMP", out), nil
 			},
 		}).Batch(batch).WithParallelism(2).To(func(i interface{}) error {
-			data := i.([]*spanner.Mutation)
+			gendata := i.([]interface{})
+			var data []*spanner.Mutation
+			for _, g := range gendata {
+				data = append(data, g.(*spanner.Mutation))
+			}
+
 			fmt.Printf("beginning transaction of len %d\n", len(data))
 			err := doInsertM(client, data, true)
-			if err != nil {
+			if err == nil {
 				fmt.Printf("completed transaction of len %d\n", len(data))
 			} else {
 				fmt.Printf("failed transaction of len %d: %v\n", len(data), err)
@@ -87,11 +103,55 @@ to quickly create a Cobra application.`,
 		for err := range errorChan {
 			result = multierror.Append(err.Err())
 		}
-		if result != nil {
-			return result
-		}
-		return nil
+		fmt.Printf("%v", result)
+		return result
 	},
+}
+
+func decode(val spanner.GenericColumnValue) (interface{}, error) {
+	switch val.Type.Code{
+	case spanner2.TypeCode_BOOL:
+		var out bool
+		err := val.Decode(&out)
+		return out, err
+	case spanner2.TypeCode_INT64:
+		var out int64
+		err := val.Decode(&out)
+		return out, err
+	case spanner2.TypeCode_FLOAT64:
+		var out float64
+		err := val.Decode(&out)
+		return out, err
+	case spanner2.TypeCode_TIMESTAMP:
+		var out time.Time
+		err := val.Decode(&out)
+		return out, err
+	case spanner2.TypeCode_DATE:
+		var out civil.Date
+		err := val.Decode(&out)
+		return out, err
+	case spanner2.TypeCode_STRING:
+		var out string
+		err := val.Decode(&out)
+		return out, err
+	case spanner2.TypeCode_BYTES:
+		var out []byte
+		err := val.Decode(&out)
+		return out, err
+	case spanner2.TypeCode_ARRAY:
+		switch val.Type.ArrayElementType.Code {
+		case spanner2.TypeCode_STRING:
+			var out []string
+			err := val.Decode(&out)
+			return out, err
+		default:
+			return nil, errors.New("decoding of non-string array fields not permittedΩ")
+		}
+	case spanner2.TypeCode_STRUCT:
+		return nil, errors.New("decoding of struct fields not permittedΩ")
+	default:
+		return nil, fmt.Errorf("unknown data type: %s", val.Type)
+	}
 }
 
 func doInsertM(client *spanner.Client, data []*spanner.Mutation, retry bool) error {
@@ -111,7 +171,10 @@ func doInsertM(client *spanner.Client, data []*spanner.Mutation, retry bool) err
 					if end >= len(data) {
 						end = len(data) -1
 					}
-					merr = multierror.Append(doInsertM(client, data[i:end], false))
+					err = doInsertM(client, data[i:end], false)
+					if err != nil {
+						merr = multierror.Append(err)
+					}
 				}
 				return merr
 			} else if code == codes.Aborted {
