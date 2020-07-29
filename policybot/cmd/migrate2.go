@@ -28,6 +28,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"istio.io/bots/policybot/pkg/pipeline"
 	"istio.io/pkg/env"
+	"os"
 	"time"
 )
 
@@ -62,8 +63,13 @@ to quickly create a Cobra application.`,
 		errorChan := pipeline.FromIter(pipeline.IterProducer{
 			Setup:    func() error { return nil},
 			Iterator: func() (i interface{}, e error) {
+				//if rand.Int() % 10 ==0 {
+				//	fmt.Print("sending fake error\n")
+				//	return nil, errors.New("fake error")
+				//}
 				row, err := rows.Next()
 				if err != nil {
+					fmt.Printf("iter error %v\n", err)
 					return nil, err
 				}
 				out := make(map[string]interface{})
@@ -71,22 +77,29 @@ to quickly create a Cobra application.`,
 					var val2 spanner.GenericColumnValue
 					err := row.ColumnByName(colname, &val2)
 					if err != nil {
-						fmt.Printf("Unable to retrieve column value: %v", err)
+						fmt.Printf("Unable to retrieve column value: %v\n", err)
 						return nil, err
 					}
 					val, err := decode(val2)
 					if err != nil {
-						fmt.Printf("Unable to decode column value: %v", err)
+						fmt.Printf("Unable to decode column value: %v\n", err)
 						return nil, err
 					}
 					out[colname] = val
 				}
 				return spanner.InsertOrUpdateMap(srcTable + "_TMP", out), nil
 			},
+		}).OnError(func(e error) {
+			fmt.Printf("%s", e)
+			os.Exit(1)
 		}).Batch(batch).WithParallelism(2).To(func(i interface{}) error {
 			gendata := i.([]interface{})
 			var data []*spanner.Mutation
 			for _, g := range gendata {
+				_, ok := g.(*spanner.Mutation)
+				if !ok {
+					fmt.Print("somethings fisshy")
+				}
 				data = append(data, g.(*spanner.Mutation))
 			}
 
@@ -103,7 +116,9 @@ to quickly create a Cobra application.`,
 		for err := range errorChan {
 			result = multierror.Append(err.Err())
 		}
-		fmt.Printf("%v", result)
+		if result != nil && len(result.Errors) > 0 {
+			fmt.Printf("%v", result)
+		}
 		return result
 	},
 }
@@ -115,7 +130,7 @@ func decode(val spanner.GenericColumnValue) (interface{}, error) {
 		err := val.Decode(&out)
 		return out, err
 	case spanner2.TypeCode_INT64:
-		var out int64
+		var out spanner.NullInt64
 		err := val.Decode(&out)
 		return out, err
 	case spanner2.TypeCode_FLOAT64:

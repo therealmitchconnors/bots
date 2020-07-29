@@ -86,7 +86,7 @@ func (sp *IterProducer) Start(ctx context.Context, bufferSize int) (resultChan c
 			err = sp.Setup()
 		}
 		if err != nil {
-			resultChan <- simpleOut{err, ""}
+			resultChan <- simpleOut{err, nil}
 			return
 		}
 		for {
@@ -94,20 +94,20 @@ func (sp *IterProducer) Start(ctx context.Context, bufferSize int) (resultChan c
 			case <-ctx.Done():
 				// attempt a non-blocking write of ctx.Error()
 				select {
-				case resultChan <- simpleOut{ctx.Err(), ""}:
+				case resultChan <- simpleOut{ctx.Err(), nil}:
 				default:
 					return
 				}
 			default:
-				result, err := sp.Iterator()
-				if err != nil {
-					if err == ErrSkip {
+				result, ierr := sp.Iterator()
+				if ierr != nil {
+					if ierr == ErrSkip {
 						continue
 					}
-					if err == iterator.Done {
+					if ierr == iterator.Done {
 						return
 					}
-					resultChan <- simpleOut{err, ""}
+					resultChan <- simpleOut{ierr, nil}
 				} else {
 					resultChan <- simpleOut{nil, result}
 				}
