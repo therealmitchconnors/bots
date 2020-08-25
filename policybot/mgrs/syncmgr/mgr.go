@@ -140,6 +140,56 @@ func ConvFilterFlags(filter string) (FilterFlags, error) {
 	return result, nil
 }
 
+func (sm *SyncMgr) Redo(context context.Context, flags FilterFlags, dryRun bool) error {
+
+	g := resultgatherer.TestResultGatherer{
+		Client:           sm.blobstore,
+		BucketName:       "istio-prow",
+		PreSubmitPrefix:  "pr-logs/pull/",
+	}
+
+	sum := make(map[string]time.Duration)
+	errorChan := sm.store.QueryConfirmedFlakes(context).Transform(func(i interface{}) (interface{}, error) {
+		cf := i.(*storage.ConfirmedFlake)
+		incorrect, err := g.CorrectFlake(context, cf.TestName, strconv.FormatInt(cf.RunNumber, 10),
+			cf.OrgLogin, cf.RepoName, strconv.FormatInt(cf.PullRequestNumber, 10))
+		if err != nil {
+			return nil, err
+		}
+		if incorrect {
+			year, month, _ := cf.StartTime.Date()
+			my := fmt.Sprintf("%d%02d", year, int(month))
+			prev := sum[my]
+			sum[my] = prev + cf.FinishTime.Sub(cf.StartTime)
+			return cf, nil
+			//return nil, errors.New(cf.TestName + strconv.FormatInt(cf.RunNumber, 10))
+		}
+		return nil, pipeline.ErrSkip
+		}).Batch(50).To(func(i interface{}) error {
+			var cfs []*storage.ConfirmedFlake
+			for _, i := range i.([]interface{}) {
+				singleResult := i.(*storage.ConfirmedFlake)
+				cfs = append(cfs, singleResult)
+			}
+			err := sm.store.DeleteConfirmedFlakes(context, cfs)
+			if err != nil {
+				return err
+			}
+			err = sm.store.SetTestResultAborted(context, cfs)
+			return err
+	}).WithParallelism(1).Go()
+	var result *multierror.Error
+	for err := range errorChan {
+		fmt.Printf("got one")
+		result = multierror.Append(result, err.Err())
+	}
+	fmt.Printf("receved %d incorrect flakes", len(result.Errors))
+	if result != nil {
+		return result
+	}
+	return nil
+}
+
 func (sm *SyncMgr) Sync(context context.Context, flags FilterFlags, dryRun bool) error {
 	ss := &syncState{
 		mgr:    sm,

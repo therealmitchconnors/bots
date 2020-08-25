@@ -17,6 +17,7 @@ package spanner
 import (
 	"context"
 	"fmt"
+	"istio.io/bots/policybot/pkg/pipeline"
 	"strings"
 
 	"cloud.google.com/go/spanner"
@@ -933,4 +934,27 @@ func (s store) QueryTestNameByEnvLabel(context context.Context, baseSha string, 
 	})
 	return
 
+}
+
+func (s store) QueryConfirmedFlakes(ctx context.Context) pipeline.Pipeline {
+	var iter *spanner.RowIterator
+	lp := pipeline.IterProducer{
+		Setup: func() error {
+			iter = s.client.Single().Query(ctx, spanner.Statement{SQL: fmt.Sprintf(
+				` select
+  cf.OrgLogin, cf.RepoName, cf.PullRequestNumber, cf.RunNumber, cf.TestName, cf.Done, cf.PassingRunNumber, cf.IssueNum, StartTime, FinishTime
+  FROM confirmedflakes cf JOIN TestResults USING (
+  OrgLogin, RepoName, PullRequestNumber, RunNumber, TestName, Done)`)})
+			return nil
+		},
+		Iterator: func() (res interface{}, err error) {
+			row, err := iter.Next()
+			if err == nil {
+				res = &storage.ConfirmedFlake{}
+				err = rowToStruct(row, res)
+			}
+			return
+		},
+	}
+	return pipeline.FromIter(lp)
 }

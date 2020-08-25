@@ -99,3 +99,31 @@ func (s store) UpdateBotActivity(ctx1 context.Context, orgLogin string, repoName
 
 	return err
 }
+
+func (s store) DeleteConfirmedFlakes(ctx context.Context, cfs []*storage.ConfirmedFlake) error {
+	_, err := s.client.ReadWriteTransaction(ctx, func(ctx2 context.Context, txn *spanner.ReadWriteTransaction) error {
+		cf := cfs[0]
+		ks := spanner.KeySets(spanner.Key{cf.OrgLogin, cf.RepoName, cf.TestName, cf.PullRequestNumber,
+			cf.RunNumber, cf.Done, cf.PassingRunNumber})
+		for _, cf := range cfs[1:] {
+			ks = spanner.KeySets(ks, spanner.Key{cf.OrgLogin, cf.RepoName, cf.TestName, cf.PullRequestNumber,
+				cf.RunNumber, cf.Done, cf.PassingRunNumber})
+		}
+		m := spanner.Delete("ConfirmedFlakes", ks)
+		return txn.BufferWrite([]*spanner.Mutation{m})
+	})
+	return err
+}
+
+func (s store) SetTestResultAborted(ctx context.Context, cfs []*storage.ConfirmedFlake) error {
+	_, err := s.client.ReadWriteTransaction(ctx, func(ctx2 context.Context, txn *spanner.ReadWriteTransaction) error {
+		var ms []*spanner.Mutation
+		for _, cf := range cfs {
+			ms = append(ms, spanner.Update("TestResults", []string{"OrgLogin", "RepoName", "TestName",
+				"PullRequestNumber", "RunNumber", "Done", "Result"},
+				[]interface{}{cf.OrgLogin, cf.RepoName, cf.TestName, cf.PullRequestNumber, cf.RunNumber, cf.Done, "ABORTED"}))
+		}
+		return txn.BufferWrite(ms)
+	})
+	return err
+}

@@ -186,6 +186,28 @@ func (trg *TestResultGatherer) getInformationFromStartedFile(ctx context.Context
 	return &started, nil
 }
 
+func (trg *TestResultGatherer) getInformationFromProwFile(ctx context.Context, pref string) (*ProwJob, error) {
+	bucket := trg.getBucket()
+	rdr, err := bucket.Reader(ctx, pref+"/prowjob.json")
+	if err != nil {
+		return nil, fmt.Errorf("error retrieving clone-records.json from %s: %v", pref, err)
+	}
+
+	defer rdr.Close()
+	prowFile, err := ioutil.ReadAll(rdr)
+	if err != nil {
+		return nil, fmt.Errorf("error reading clone-records.json from %s: %v", pref, err)
+	}
+
+	var result *ProwJob
+
+	if err = json.Unmarshal(prowFile, &result); err != nil {
+		return nil, fmt.Errorf("error parsing clone-records.json from %s: %v", pref, err)
+	}
+
+	return result, nil
+}
+
 func (trg *TestResultGatherer) getInformationFromCloneFile(ctx context.Context, pref string) ([]*cloneRecord, error) {
 	bucket := trg.getBucket()
 	rdr, err := bucket.Reader(ctx, pref+"clone-records.json")
@@ -436,6 +458,16 @@ func (trg *TestResultGatherer) AddChildFeatureLabel(testOutcome *store.TestOutco
 	featureLabel.SuiteName = testOutcome.SuiteName
 	featureLabel.TestOutcomeName = testOutcome.TestOutcomeName
 	return featureLabel
+}
+
+func (trg *TestResultGatherer) CorrectFlake(ctx context.Context, testName string,
+	testRun string, orgLogin string, repoName string, prNum string) (incorrect bool, err error) {
+	runPath := trg.getRepoPrPath(orgLogin, repoName) + prNum + "/" + testName + "/" + testRun
+	pj, err := trg.getInformationFromProwFile(ctx, runPath)
+	if err != nil {
+		return false, err
+	}
+	return pj.Status.State == AbortedState, nil
 }
 
 func (trg *TestResultGatherer) GetPostSubmitTestResult(ctx context.Context, testName string,

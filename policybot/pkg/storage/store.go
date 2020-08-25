@@ -17,6 +17,7 @@ package storage
 import (
 	"context"
 	"io"
+	"istio.io/bots/policybot/pkg/pipeline"
 	"time"
 )
 
@@ -95,7 +96,10 @@ type Store interface {
 	QueryTestNameByEnvLabel(context context.Context, baseSha string, env string, label string) ([]*TestNameByEnvLabel, error)
 
 	QueryTestFlakeIssues(context context.Context, orgLogin string, repoName string, inactiveDays, createdDays int) ([]*Issue, error)
+	QueryConfirmedFlakes(ctx context.Context) pipeline.Pipeline
 
 	GetLatestIssueMemberActivity(context context.Context, orgLogin string, repoName string, issueNumber int) (time.Time, error)
 	GetLatestIssueMemberComment(context context.Context, orgLogin string, repoName string, issueNumber int) (time.Time, error)
+	DeleteConfirmedFlakes(ctx context.Context, cfs []*ConfirmedFlake) error
+	SetTestResultAborted(ctx context.Context, cfs []*ConfirmedFlake) error
 }
