@@ -392,13 +392,9 @@ func (trg *TestResultGatherer) GetTestResult(ctx context.Context, testName strin
 			return nil, err
 		}
 
-		if len(records) < 1 {
-			return nil, fmt.Errorf("test %s %s has an empty clone file.  Cannot proceed", testName, testRun)
-		}
-		record := records[0]
-
-		if len(record.Refs.Pulls) < 1 {
-			return nil, fmt.Errorf("test %s %s has a malformed clone file.  Cannot proceed", testName, testRun)
+		record , err := getCloneRecord(records, testName, testRun)
+		if err != nil {
+			return nil, err
 		}
 		testResult.Sha, err = hex.DecodeString(record.Refs.Pulls[0].Sha)
 		if err != nil {
@@ -453,6 +449,19 @@ func (trg *TestResultGatherer) GetTestResult(ctx context.Context, testName strin
 		testResult.Signatures = trg.getEnvironmentalSignatures(ctx, testRun)
 	}
 	return
+}
+
+func getCloneRecord(records []*cloneRecord, testName string, testRun string) (*cloneRecord, error) {
+	if len(records) < 1 {
+		return nil, fmt.Errorf("test %s %s has an empty clone file.  Cannot proceed", testName, testRun)
+	}
+
+	for _, record := range records {
+		if len(record.Refs.Pulls) >= 1 {
+			return record, nil
+		}
+	}
+	return nil, fmt.Errorf("test %s %s has a malformed clone file.  Cannot proceed", testName, testRun)
 }
 
 func (trg *TestResultGatherer) AddChildSuiteOutcome(testResult *store.PostSubmitTestResult,
