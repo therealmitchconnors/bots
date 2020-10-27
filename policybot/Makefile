@@ -1,62 +1,74 @@
-VERSION := $(shell date +%Y%m%d%H%M%S)
+# WARNING: DO NOT EDIT, THIS FILE IS PROBABLY A COPY
+#
+# The original version of this file is located in the https://github.com/istio/common-files repo.
+# If you're looking at this file in a different repo and want to make a change, please go to the
+# common-files repo, make the change there and check it in. Then come back to this repo and run
+# "make update-common".
 
-TAG ?= $(VERSION)
-HUB ?= gcr.io/istio-testing/policybot
-IMG := $(HUB):$(TAG)
+# Copyright Istio Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
-PROJECT ?= istio-testing
-CLUSTER ?= policy-bot
-ZONE    ?= us-central1-a
+SHELL := /bin/bash
 
-export GO111MODULE=on
+# allow optional per-repo overrides
+-include Makefile.overrides.mk
 
-dockerrun := docker run -t -i --sig-proxy=true --rm -v $(shell pwd):/site -w /site "gcr.io/istio-testing/build-tools:2019-10-11T13-37-52"
+# Set the environment variable BUILD_WITH_CONTAINER to use a container
+# to build the repo. The only dependencies in this mode are to have make and
+# docker. If you'd rather build with a local tool chain instead, you'll need to
+# figure out all the tools you need in your environment to make that work.
+export BUILD_WITH_CONTAINER ?= 0
 
-gen:
-ifneq ($(CI),true)
-	@$(dockerrun) scripts/gen_dashboard.sh
+ifeq ($(BUILD_WITH_CONTAINER),1)
+
+# An export free of arugments in a Makefile places all variables in the Makefile into the
+# environment. This is needed to allow overrides from Makefile.overrides.mk.
+export
+
+$(echo 'BUILDING WITH CONTAINER')
+
+$(shell $(shell pwd)/common/scripts/setup_env.sh)
+
+RUN = ./common/scripts/run.sh
+
+MAKE_DOCKER = $(RUN) make --no-print-directory -e -f Makefile.core.mk
+
+%:
+	@$(MAKE_DOCKER) $@
+
+default:
+	@$(MAKE_DOCKER)
+
+shell:
+	@$(RUN) /bin/bash
+
+.PHONY: default
+
 else
-	@scripts/gen_dashboard.sh
+
+@echo 'NOT USING CONTAINER'
+# If we are not in build container, we need a workaround to get environment properly set
+# Write to file, then include
+$(shell mkdir -p out)
+$(shell $(shell pwd)/common/scripts/setup_env.sh envfile > out/.env)
+include out/.env
+# An export free of arugments in a Makefile places all variables in the Makefile into the
+# environment. This behavior may be surprising to many that use shell often, which simply
+# displays the existing environment
+export
+
+export GOBIN ?= $(GOPATH)/bin
+include Makefile.core.mk
+
 endif
-	@go generate ./...
-
-clean:
-	@rm -fr policybot tmp generated */*.gen.go */*/*.gen.go */*/*/*.gen.go
-
-deploy: push deploy_only
-.PHONY: deploy
-
-deploy_only: get-cluster-credentials
-	@helm template --set image=$(IMG) \
-		--set GITHUB_WEBHOOK_SECRET=$(GITHUB_WEBHOOK_SECRET) \
-		--set GITHUB_TOKEN=$(GITHUB_TOKEN) \
-		--set GCP_CREDS=$(GCP_CREDS) \
-		--set SENDGRID_APIKEY=$(SENDGRID_APIKEY) \
-		--set GITHUB_OAUTH_CLIENT_ID=$(GITHUB_OAUTH_CLIENT_ID) \
-		--set GITHUB_OAUTH_CLIENT_SECRET=$(GITHUB_OAUTH_CLIENT_SECRET) \
-		deploy/policybot | kubectl apply -f -
-	@echo "Deployed policybot:$(IMG) to GKE"
-.PHONY: deploy_only
-
-.PHONY: get-cluster-credentials
-get-cluster-credentials:
-	gcloud container clusters get-credentials "$(CLUSTER)" --project="$(PROJECT)" --zone="$(ZONE)"
-
-container: gen
-	@GO111MODULE=on CGO_ENABLED=0 GOOS=linux go build
-	@docker build --no-cache --quiet --tag $(IMG) .
-.PHONY: container
-
-push: container
-	@echo "When deploying, please make sure of the following:"
-	@echo ""
-	@echo "  1. That latest sources are up to date."
-	@echo "  2. That the dashboard is working locally."
-	@echo "  3. That eng.istio.io works after deployment."
-	@echo ""
-ifneq ($(CI),true)
-	@read -p "Press enter to continue."
-endif
-	@docker push $(IMG)
-	@echo "Built container and published to $(IMG)"
-.PHONY: push

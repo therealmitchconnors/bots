@@ -358,7 +358,16 @@ func (trg *TestResultGatherer) GetTestResult(ctx context.Context, testName strin
 	testResult.Done = false
 	pj, err := trg.getInformationFromProwFile(ctx, testRun)
 	if err != nil {
-		return nil, err
+		// some older test runs don't have prow.json files.  Attempt to reconstruct from finished.json
+		finished, err2 := trg.getInformationFromFinishedFile(ctx, testRun)
+		if err2 != nil {
+			return nil, err
+		}
+		pj = &ProwJob{
+			Status: ProwJobStatus{
+				State: ProwJobState(strings.ToLower(finished.Result)),
+			},
+		}
 	}
 
 	if pj.Status.State == TriggeredState || pj.Status.State == PendingState {
